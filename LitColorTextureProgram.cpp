@@ -95,7 +95,7 @@ LitColorTextureProgram::LitColorTextureProgram() {
 		"		vec3 l = (LIGHT_LOCATION - position);\n"
 		"		float dis2 = dot(l,l);\n"
 		"		l = normalize(l);\n"
-		"		float nl = max(0.0, dot(n, l));\n"
+		"		float nl = max(0.0, dot(n, l)) / max(1.0, dis2);\n"
 		"		float c = dot(l,-LIGHT_DIRECTION);\n"
 		"		nl *= smoothstep(LIGHT_CUTOFF,mix(LIGHT_CUTOFF,1.0,0.1), c);\n"
 		"		e = nl * LIGHT_ENERGY;\n"

@@ -11,6 +11,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
+#include <sstream>
 
 GLuint meshes_for_lit_color_texture_program = 0;
 Load<MeshBuffer> hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
@@ -36,6 +37,36 @@ Load<Scene> loaded_scene(LoadTagDefault, []() -> Scene const * {
 
                    });
 });
+
+namespace { // helpers
+
+template<class T>
+std::string to_str(const T &x) {
+  std::stringstream ss;
+  ss << x;
+  return ss.str();
+}
+
+float random_real(float min_value = 0.0f, float max_value = 1.0f) {
+  static std::random_device dev{};
+  static std::mt19937 rng{dev()};
+  return std::uniform_real_distribution<float>{min_value, max_value}(rng);
+}
+
+} // helpers end
+
+void Enemy::respawn(glm::vec2 position) {
+  hit_point = 4;
+  wobble = 0.0f;
+  transform_body->position.x = position.x;
+  transform_body->position.y = position.y;
+  transform_body->position.z = 1.16f;
+}
+
+void Enemy::respawn_random(glm::vec2 center, float distance) {
+  auto theta = random_real() * glm::pi<float>() * 2.0f;
+  respawn({center.x + distance * std::cos(theta), center.y + distance * std::sin(theta)});
+}
 
 PlayMode::PlayMode() : scene(*loaded_scene) {
   //get pointers for enemies:
@@ -72,21 +103,7 @@ PlayMode::PlayMode() : scene(*loaded_scene) {
     throw std::runtime_error(
         "Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
   camera = &scene.cameras.front();
-  auto init_rotation_euler = glm::eulerAngles(camera->transform->rotation);
-  init_rotation = glm::angleAxis(init_rotation_euler[2], glm::vec3(0.0f, 0.0f, 1.0f))
-      * glm::angleAxis(glm::pi<float>() / 2.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-  camera->transform->rotation = init_rotation;
-  camera->transform->position.z = 1.7f;
-
-  for (auto &enemy : enemies) {
-    if (!enemy.transform_body
-        || !enemy.transform_left_arm || !enemy.transform_right_arm
-        || !enemy.transform_left_leg || !enemy.transform_right_leg) {
-      throw std::runtime_error{"NULL transform pointers in enemies."};
-    } else {
-      enemy.respawn_random(camera->transform->position, 10.0f);
-    }
-  }
+  init_rotation = glm::angleAxis(glm::pi<float>() / 2.0f, glm::vec3(1.0f, 0.0f, 0.0f));
 }
 
 PlayMode::~PlayMode() {
@@ -114,6 +131,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
       down.downs += 1;
       down.pressed = true;
       return true;
+    } else if (evt.key.keysym.sym == SDLK_r) {
+      restart.downs += 1;
+      restart.pressed = true;
+      return true;
     }
   } else if (evt.type == SDL_KEYUP) {
     if (evt.key.keysym.sym == SDLK_a) {
@@ -127,6 +148,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
       return true;
     } else if (evt.key.keysym.sym == SDLK_s) {
       down.pressed = false;
+      return true;
+    } else if (evt.key.keysym.sym == SDLK_r) {
+      restart.pressed = false;
       return true;
     }
   } else if (evt.type == SDL_MOUSEBUTTONDOWN) {
@@ -162,6 +186,15 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
+
+  if (restart.pressed && restart_button_released) {
+    restart_button_released = false;
+    restart_game();
+  } else if (!restart.pressed) {
+    restart_button_released = true;
+  }
+
+  if (!running) return;
 
   //move camera:
   {
@@ -243,7 +276,10 @@ void PlayMode::update(float elapsed) {
           t_min[0] = std::max(t_min[0], std::max(t_min[1], t_min[2]));
           t_max[0] = std::min(t_max[0], std::min(t_max[1], t_max[2]));
 
-          if (t_min[0] <= t_max[0] && t_min[0] < distance) {
+          if (t_min[0] > t_max[0]) continue;
+          if (t_min[0] < 0.0f) t_min[0] = t_max[0];
+
+          if (t_min[0] >= 0.0f && t_min[0] < distance) {
             distance = t_min[0];
             hit_object_transform = &transform;
           }
@@ -264,17 +300,28 @@ void PlayMode::update(float elapsed) {
         }
 
         if (enemy.hit_point <= 0) {
+          ++score;
           enemy.respawn_random(camera->transform->position, 10.0f);
+          enemy_speed += enemy_speed_addition_per_kill;
         }
       }
     }
   } // shoot end
+
+  // game over
+  for (const auto &enemy : enemies) {
+    auto l = enemy.transform_body->position - camera->transform->position;
+    if (glm::length(glm::vec2{l}) < 0.5f) {
+      running = false;
+    }
+  }
 
   //reset button press counters:
   left.downs = 0;
   right.downs = 0;
   up.downs = 0;
   down.downs = 0;
+  restart.downs = 0;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
@@ -284,15 +331,17 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
   //set up light type and position for lit_color_texture_program:
   // TODO: consider using the Light(s) in the scene to do this
   glm::mat4x3 frame = camera->transform->make_local_to_parent();
+  auto frame_front = glm::normalize(glm::vec3{-frame[2].x, -frame[2].y, 0.0f});
+  auto frame_right = glm::normalize(glm::vec3{-frame[0].x, -frame[0].y, 0.0f});
+  auto direction = glm::normalize(frame_front + frame_right);
+  direction.z = -1.0f;
   glUseProgram(lit_color_texture_program->program);
-  glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 2);
-  glUniform3fv(lit_color_texture_program->LIGHT_LOCATION_vec3, 1, glm::value_ptr(camera->transform->position));
-  glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(-frame[2]));
-  glUniform1f(lit_color_texture_program->LIGHT_CUTOFF_float, 0.95f);
+  glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
+  glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(direction));
   glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
   glUseProgram(0);
 
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
   glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -301,7 +350,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
   GL_ERRORS(); //print any errors produced by this setup code
 
-  scene.draw(*camera);
+  if (running) {
+    scene.draw(*camera);
+  }
 
   { //use DrawLines to overlay some text:
     glDisable(GL_DEPTH_TEST);
@@ -313,26 +364,69 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
         0.0f, 0.0f, 0.0f, 1.0f
     ));
 
-    constexpr float H = 0.09f;
-    lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+    float H = 0.09f;
+    float ofs = 2.0f / float(drawable_size.y);
+    lines.draw_text("Mouse motion rotates camera; Left mouse button shoots; WASD moves; escape ungrabs mouse",
                     glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                     glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-    float ofs = 2.0f / drawable_size.y;
-    lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+    lines.draw_text("Mouse motion rotates camera; Left mouse button shoots; WASD moves; escape ungrabs mouse",
                     glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+                    glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                    glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+    lines.draw_text("Score: " + to_str(score),
+                    glm::vec3(-aspect + 0.1f * H, 1.0f - 1.1f * H, 0.0),
+                    glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                    glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+    lines.draw_text("Score: " + to_str(score),
+                    glm::vec3(-aspect + 0.1f * H + ofs, 1.0f - 1.1f * H + ofs, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                     glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 
     // draw crosshair
-    constexpr float crosshair_size{0.02f};
-    const glm::u8vec4 crosshair_color{0x00, 0xff, 0x00, 0xff};
-    lines.draw(glm::vec3{-crosshair_size, 0.0f, 0.1f},
-               glm::vec3{crosshair_size, 0.0f, 0.1f},
-               crosshair_color);
-    lines.draw(glm::vec3{0.0f, -crosshair_size, 0.1f},
-               glm::vec3{0.0f, crosshair_size, 0.1f},
-               crosshair_color);
+    float crosshair_size{0.02f};
+    if (running) {
+      const glm::u8vec4 crosshair_color{0x00, 0xff, 0x00, 0xff};
+      lines.draw(glm::vec3{-crosshair_size, 0.0f, 0.0f},
+                 glm::vec3{crosshair_size, 0.0f, 0.0f},
+                 crosshair_color);
+      lines.draw(glm::vec3{0.0f, -crosshair_size, 0.0f},
+                 glm::vec3{0.0f, crosshair_size, 0.0f},
+                 crosshair_color);
+    }
 
+    // prompt player to restart (or start) the game
+    if (!running) {
+      lines.draw_text("Press 'R' to start the game.",
+                      glm::vec3(-14 * H, -0.5f * H, 0.0),
+                      glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                      glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+      lines.draw_text("Press 'R' to start the game.",
+                      glm::vec3(-14 * H + ofs, -0.5f * H + ofs, 0.0),
+                      glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                      glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+    }
   }
+}
+
+void PlayMode::restart_game() {
+  camera->transform->rotation = init_rotation;
+  camera->transform->position = glm::vec3{0.0f, 0.0f, 1.7f};
+  camera_rotation_angle = glm::vec2{};
+
+  for (auto &enemy : enemies) {
+    if (!enemy.transform_body
+        || !enemy.transform_left_arm || !enemy.transform_right_arm
+        || !enemy.transform_left_leg || !enemy.transform_right_leg) {
+      throw std::runtime_error{"NULL transform pointers in enemies."};
+    } else {
+      enemy.respawn_random(camera->transform->position, 10.0f);
+    }
+  }
+
+  score = 0;
+  enemy_speed = init_enemy_speed;
+  time_since_last_shoot = 0.0f;
+  trigger_released = true;
+  running = true;
 }

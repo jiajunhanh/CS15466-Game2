@@ -6,7 +6,6 @@
 
 #include <vector>
 #include <deque>
-#include <random>
 
 struct Enemy {
   glm::vec2 direction{};
@@ -19,21 +18,8 @@ struct Enemy {
   Scene::Transform *transform_left_leg{};
   Scene::Transform *transform_right_leg{};
 
-  void respawn(glm::vec2 position) {
-    hit_point = 4;
-    wobble = 0.0f;
-    transform_body->position.x = position.x;
-    transform_body->position.y = position.y;
-  }
-
-  void respawn_random(glm::vec2 center, float distance) {
-    static std::random_device dev{};
-    static std::mt19937 rng{dev()};
-    static std::uniform_real_distribution<float> dist{0.0f, glm::pi<float>() * 2.0f};
-
-    auto theta = dist(rng);
-    respawn({center.x + distance * std::cos(theta), center.y + distance * std::sin(theta)});
-  }
+  void respawn(glm::vec2 position);
+  void respawn_random(glm::vec2 center, float distance);
 };
 
 struct PlayMode : Mode {
@@ -45,25 +31,32 @@ struct PlayMode : Mode {
   virtual void update(float elapsed) override;
   virtual void draw(glm::uvec2 const &drawable_size) override;
 
+  //reset function
+  void restart_game();
+
   //settings:
-  static constexpr float shoot_interval{0.5f};
+  static constexpr float shoot_interval{0.05f};
   static constexpr float player_speed{3.0f};
-  static constexpr float enemy_speed{2.5f};
+  static constexpr float init_enemy_speed{0.5f};
+  static constexpr float enemy_speed_addition_per_kill{0.1f};
 
   //----- game state -----
 
+  unsigned int score{};
+  float enemy_speed{};
   float time_since_last_shoot{};
-  bool trigger_released{true};
+  bool trigger_released{};
+  bool restart_button_released{};
+  bool running{};
 
   //input tracking:
   struct Button {
     uint8_t downs = 0;
     uint8_t pressed = 0;
-  } left, right, down, up, shoot;
+  } left, right, down, up, shoot, restart;
 
   //local copy of the game scene (so code can change it during gameplay):
   Scene scene;
-
   std::vector<Enemy> enemies;
 
   //camera:
