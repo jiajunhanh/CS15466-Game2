@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <deque>
+#include <random>
 
 struct Enemy {
   glm::vec2 direction{};
@@ -17,6 +18,22 @@ struct Enemy {
   Scene::Transform *transform_right_arm{};
   Scene::Transform *transform_left_leg{};
   Scene::Transform *transform_right_leg{};
+
+  void respawn(glm::vec2 position) {
+    hit_point = 4;
+    wobble = 0.0f;
+    transform_body->position.x = position.x;
+    transform_body->position.y = position.y;
+  }
+
+  void respawn_random(glm::vec2 center, float distance) {
+    static std::random_device dev{};
+    static std::mt19937 rng{dev()};
+    static std::uniform_real_distribution<float> dist{0.0f, glm::pi<float>() * 2.0f};
+
+    auto theta = dist(rng);
+    respawn({center.x + distance * std::cos(theta), center.y + distance * std::sin(theta)});
+  }
 };
 
 struct PlayMode : Mode {

@@ -67,15 +67,6 @@ PlayMode::PlayMode() : scene(*loaded_scene) {
     }
   }
 
-  for (auto &enemy : enemies) {
-    if (!enemy.transform_body
-        || !enemy.transform_left_arm || !enemy.transform_right_arm
-        || !enemy.transform_left_leg || !enemy.transform_right_leg) {
-      throw std::runtime_error{"NULL transform pointers in enemies."};
-    }
-    enemy.hit_point = 4;
-  }
-
   //get pointer to camera for convenience:
   if (scene.cameras.size() != 1)
     throw std::runtime_error(
@@ -86,6 +77,16 @@ PlayMode::PlayMode() : scene(*loaded_scene) {
       * glm::angleAxis(glm::pi<float>() / 2.0f, glm::vec3(1.0f, 0.0f, 0.0f));
   camera->transform->rotation = init_rotation;
   camera->transform->position.z = 1.7f;
+
+  for (auto &enemy : enemies) {
+    if (!enemy.transform_body
+        || !enemy.transform_left_arm || !enemy.transform_right_arm
+        || !enemy.transform_left_leg || !enemy.transform_right_leg) {
+      throw std::runtime_error{"NULL transform pointers in enemies."};
+    } else {
+      enemy.respawn_random(camera->transform->position, 10.0f);
+    }
+  }
 }
 
 PlayMode::~PlayMode() {
@@ -263,9 +264,7 @@ void PlayMode::update(float elapsed) {
         }
 
         if (enemy.hit_point <= 0) {
-          enemy.transform_body->position.x = 0.0f;
-          enemy.transform_body->position.y = 0.0f;
-          enemy.hit_point = 4;
+          enemy.respawn_random(camera->transform->position, 10.0f);
         }
       }
     }
