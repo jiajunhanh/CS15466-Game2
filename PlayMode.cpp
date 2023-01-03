@@ -172,7 +172,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
       camera_rotation_angle += glm::vec2{
           float(evt.motion.xrel),
           float(-evt.motion.yrel)
-      } / float(window_size.y) * camera->fovy;
+      } / float(window_size.y) * camera->fovy * mouse_sensitivity;
       camera_rotation_angle.y = std::clamp(camera_rotation_angle.y, -glm::pi<float>() / 2.0f, glm::pi<float>() / 2.0f);
       camera->transform->rotation = glm::normalize(
           init_rotation
@@ -180,6 +180,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
               * glm::angleAxis(camera_rotation_angle.y, glm::vec3(1.0f, 0.0f, 0.0f)));
       return true;
     }
+  } else if (evt.type == SDL_MOUSEWHEEL) {
+    mouse_sensitivity += float(evt.wheel.y) * 0.1f;
+    mouse_sensitivity = std::max(0.1f, mouse_sensitivity);
   }
 
   return false;
@@ -366,14 +369,24 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
     float H = 0.09f;
     float ofs = 2.0f / float(drawable_size.y);
-    lines.draw_text("Mouse motion rotates camera; Left mouse button shoots; WASD moves; escape ungrabs mouse",
-                    glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+    lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+                    glm::vec3(-aspect + 0.1f * H, -1.0 + 1.6f * H, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                     glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-    lines.draw_text("Mouse motion rotates camera; Left mouse button shoots; WASD moves; escape ungrabs mouse",
-                    glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+    lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+                    glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 1.6f * H + ofs, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                     glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+    lines.draw_text("Left mouse button shoots; Mousewheel changes mouse sensitivity",
+                    glm::vec3(-aspect + 0.1f * H, -1.0 + 0.5f * H, 0.0),
+                    glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                    glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+    lines.draw_text("Left mouse button shoots; Mousewheel changes mouse sensitivity",
+                    glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.5f * H + ofs, 0.0),
+                    glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                    glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
     lines.draw_text("Score: " + to_str(score),
                     glm::vec3(-aspect + 0.1f * H, 1.0f - 1.1f * H, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
@@ -398,11 +411,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
     // prompt player to restart (or start) the game
     if (!running) {
       lines.draw_text("Press 'R' to start the game.",
-                      glm::vec3(-14 * H, -0.5f * H, 0.0),
+                      glm::vec3(-5.5f * H, -0.5f * H, 0.0),
                       glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                       glm::u8vec4(0x00, 0x00, 0x00, 0x00));
       lines.draw_text("Press 'R' to start the game.",
-                      glm::vec3(-14 * H + ofs, -0.5f * H + ofs, 0.0),
+                      glm::vec3(-5.5f * H + ofs, -0.5f * H + ofs, 0.0),
                       glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                       glm::u8vec4(0xff, 0xff, 0xff, 0x00));
     }

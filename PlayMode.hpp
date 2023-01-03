@@ -39,12 +39,14 @@ struct PlayMode : Mode {
   static constexpr float player_speed{3.0f};
   static constexpr float init_enemy_speed{0.5f};
   static constexpr float enemy_speed_addition_per_kill{0.1f};
+  static constexpr float default_sensitivity{1.0f};
 
   //----- game state -----
 
   unsigned int score{};
   float enemy_speed{};
   float time_since_last_shoot{};
+  float mouse_sensitivity{1.0f};
   bool trigger_released{};
   bool restart_button_released{};
   bool running{};
