@@ -43,25 +43,25 @@ PlayMode::PlayMode() : scene(*loaded_scene) {
     auto type_offset = transform.name.find('.');
     auto type_str = transform.name.substr(0, type_offset);
     if (type_str == "Body") {
-      auto idx = std::stoi(transform.name.substr(type_offset + 1)) - 1;
+      auto idx = std::stoull(transform.name.substr(type_offset + 1)) - 1;
       if (enemies.size() < idx + 1) enemies.resize(idx + 1);
       enemies[idx].transform_body = &transform;
     } else if (type_str == "LeftArm") {
-      auto idx = std::stoi(transform.name.substr(type_offset + 1)) - 1;
+      auto idx = std::stoull(transform.name.substr(type_offset + 1)) - 1;
       if (enemies.size() < idx + 1) enemies.resize(idx + 1);
       enemies[idx].transform_left_arm = &transform;
-      transform.rotation = glm::angleAxis(-glm::pi<float>() / 3.0f, glm::vec3{0.0f, 0.0f, 1.0f});
+      transform.rotation = glm::angleAxis(-glm::pi<float>() / 2.5f, glm::vec3{0.0f, 0.0f, 1.0f});
     } else if (type_str == "RightArm") {
-      auto idx = std::stoi(transform.name.substr(type_offset + 1)) - 1;
+      auto idx = std::stoull(transform.name.substr(type_offset + 1)) - 1;
       if (enemies.size() < idx + 1) enemies.resize(idx + 1);
       enemies[idx].transform_right_arm = &transform;
-      transform.rotation = glm::angleAxis(glm::pi<float>() / 3.0f, glm::vec3{0.0f, 0.0f, 1.0f});
+      transform.rotation = glm::angleAxis(glm::pi<float>() / 2.5f, glm::vec3{0.0f, 0.0f, 1.0f});
     } else if (type_str == "LeftLeg") {
-      auto idx = std::stoi(transform.name.substr(type_offset + 1)) - 1;
+      auto idx = std::stoull(transform.name.substr(type_offset + 1)) - 1;
       if (enemies.size() < idx + 1) enemies.resize(idx + 1);
       enemies[idx].transform_left_leg = &transform;
     } else if (type_str == "RightLeg") {
-      auto idx = std::stoi(transform.name.substr(type_offset + 1)) - 1;
+      auto idx = std::stoull(transform.name.substr(type_offset + 1)) - 1;
       if (enemies.size() < idx + 1) enemies.resize(idx + 1);
       enemies[idx].transform_right_leg = &transform;
     }
@@ -324,5 +324,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
                     glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
                     glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
                     glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+    // draw crosshair
+    constexpr float crosshair_size{0.02f};
+    const glm::u8vec4 crosshair_color{0x00, 0xff, 0x00, 0xff};
+    lines.draw(glm::vec3{-crosshair_size, 0.0f, 0.1f},
+               glm::vec3{crosshair_size, 0.0f, 0.1f},
+               crosshair_color);
+    lines.draw(glm::vec3{0.0f, -crosshair_size, 0.1f},
+               glm::vec3{0.0f, crosshair_size, 0.1f},
+               crosshair_color);
+
   }
 }
